@@ -32,6 +32,10 @@ jobs:
         working-directory: telugusetu-mobile
         run: npx cap --version
 
+      - name: Run mobile preflight tests
+        working-directory: telugusetu-mobile
+        run: npm run preflight
+
       - name: Build web app
         working-directory: telugusetu-mobile
         run: npm run build
