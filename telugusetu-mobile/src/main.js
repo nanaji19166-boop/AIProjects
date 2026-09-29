@@ -104,8 +104,8 @@ async function loadTokenizer(fileName){
   const cfg={model_max_length:256,pad_token:'<pad>',unk_token:'<unk>',bos_token:'<s>',eos_token:'</s>',padding_side:'right',truncation_side:'right'};
   return {tok:new PreTrainedTokenizer(j,cfg),meta,gen};
 }
-async function createSession(url,dataUrl){
-  return ort.InferenceSession.create(url,{executionProviders:['wasm'],executionMode:'sequential',graphOptimizationLevel:'disabled',externalData:[{path:dataUrl.split('/').pop(),data:dataUrl}]});
+async function createSession(modelBlob,dataBlob,dataName){
+  return ort.InferenceSession.create(modelBlob,{executionProviders:['wasm'],executionMode:'sequential',graphOptimizationLevel:'disabled',externalData:[{path:dataName,data:dataBlob}]});
 }
 async function ensureModel(){
   if(model)return model;
