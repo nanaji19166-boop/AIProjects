@@ -55,6 +55,28 @@ function markerSplit(line){
   return m?{marker:m[1],body:m[2]}:{marker:'',body:line};
 }
 
+function normalizeExtractedLines(lines){
+  const out=[];
+  for(const raw of lines){
+    const line=raw.trim();
+    if(!line)continue;
+    const matches=[...line.matchAll(/(?:^|\\s)(Q(?:uestion)?\\s*\\d{1,4}\\s*[\\.\\):\\-])(?=\\s|$)/gi)];
+    if(matches.length<=1){out.push(line);continue;}
+    let first=matches[0];
+    if(first.index>0){
+      const prefix=line.slice(0,first.index).trim();
+      if(prefix)out.push(prefix);
+    }
+    for(let i=0;i<matches.length;i++){
+      const start=matches[i].index;
+      const endPos=i+1<matches.length?matches[i+1].index:line.length;
+      const chunk=line.slice(start,endPos).trim();
+      if(chunk)out.push(chunk);
+    }
+  }
+  return out;
+}
+
 async function extractPdf(file){
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf,useWorkerFetch:false,isEvalSupported:true}).promise;
@@ -69,11 +91,10 @@ async function extractPdf(file){
       line+=(line?' ':'')+it.str;lastY=y;
     }
     if(line.trim())lines.push(line.trim());
-    pages.push({page:p,lines});
+    pages.push({page:p,lines:normalizeExtractedLines(lines)});
   }
   return pages;
 }
-
 function analyzePages(pages){
   const all=pages.flatMap(p=>p.lines);
   const qs=all.filter(l=>/^\s*Q\s*\d{1,4}\s*[\.\):\-]/i.test(l));
