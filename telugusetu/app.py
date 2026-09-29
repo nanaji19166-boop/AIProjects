@@ -45,7 +45,12 @@ async def translate(job_id:str=Form(...)):
 @app.get("/status/{job_id}")
 def status(job_id:str):
     with jobs_lock: state=jobs.get(job_id)
-    if not state: return JSONResponse({"error":"Job not found."},status_code=404)
+    if not state:
+        # A free Render instance can restart during a memory-heavy job. Give the
+        # browser a useful retry message instead of a generic 404/translation failure.
+        if (DATA/f"{job_id}.pdf").exists():
+            return {"state":"error","error":"The translation worker restarted before finishing. Please tap Translate to Telugu again."}
+        return JSONResponse({"error":"Job not found. Please analyze the PDF again."},status_code=404)
     return state
 @app.get("/download/{job_id}/{kind}")
 def download(job_id:str,kind:str):
