@@ -109,15 +109,23 @@ async function createSession(modelBlob,dataBlob,dataName){
 }
 async function ensureModel(){
   if(model)return model;
-  msg('First run: downloading the Telugu translation engine (~318 MB)…');
-  $('detail').textContent='Downloading model files. Keep Wi-Fi/mobile data available for the first run.';
-  const [src,tgt]=await Promise.all([loadTokenizer(F.srcTok),loadTokenizer(F.tgtTok)]);
-  $('detail').textContent='Loading encoder…';
-  const enc=await createSession(MODEL+F.enc,MODEL+F.encData);
-  $('detail').textContent='Loading decoder…';
-  const dec=await createSession(MODEL+F.dec,MODEL+F.decData);
+  msg('Preparing the Telugu translation engine (~318 MB first time only)…');
+  $('progressWrap').classList.remove('hidden');
+  modelProgress(1,'Checking saved model files on this phone…');
+  try{await navigator.storage?.persist?.();}catch{}
+  const src=await loadTokenizer(F.srcTok);
+  const tgt=await loadTokenizer(F.tgtTok);
+  const encBlob=await modelAsset(F.enc,'Encoder model',8,12);
+  const encData=await modelAsset(F.encData,'Encoder weights',12,35);
+  modelProgress(38,'Opening encoder…');
+  const enc=await createSession(encBlob,encData,F.encData);
+  const decBlob=await modelAsset(F.dec,'Decoder model',42,45);
+  const decData=await modelAsset(F.decData,'Decoder weights',45,88);
+  modelProgress(92,'Opening decoder…');
+  const dec=await createSession(decBlob,decData,F.decData);
   model={srcTok:src.tok,tgtTok:tgt.tok,startId:Number(src.gen.decoder_start_token_id||2),eosId:Number(src.gen.eos_token_id||2),enc,dec};
-  msg('Translation engine ready.');
+  modelProgress(100,'Translation engine ready on this phone.');
+  msg('Translation engine ready. Future runs reuse the saved model files.');
   return model;
 }
 function i64(a){return new ort.Tensor('int64',BigInt64Array.from(a,BigInt),[1,a.length]);}
