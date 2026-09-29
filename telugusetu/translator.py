@@ -24,13 +24,26 @@ def restore(text,p):
 class LocalTranslator:
     def __init__(self): self.model=None
     def load(self):
-        from inference.engine import Model
-        self.model=Model('models/indictrans2',model_type='ctranslate2')
+        import torch
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        from IndicTransToolkit import IndicProcessor
+        self.ip=IndicProcessor(inference=True)
+        self.tokenizer=AutoTokenizer.from_pretrained('ai4bharat/indictrans2-en-indic-dist-200M',trust_remote_code=True)
+        self.model=AutoModelForSeq2SeqLM.from_pretrained('ai4bharat/indictrans2-en-indic-dist-200M',trust_remote_code=True)
+        self.model.eval()
+        self.device='cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(self.device)
     def translate(self,text):
         if not text.strip(): return text
         if self.model is None: self.load()
+        import torch
         safe,p=protect(text)
-        return restore(self.model.translate_paragraph(safe,'eng_Latn','tel_Telu'),p)
+        batch=self.ip.preprocess_batch([safe],src_lang='eng_Latn',tgt_lang='tel_Telu',visualize=False)
+        inputs=self.tokenizer(batch,padding='longest',truncation=True,max_length=256,return_tensors='pt').to(self.device)
+        with torch.inference_mode():
+            out=self.model.generate(**inputs,num_beams=5,num_return_sequences=1,max_length=256)
+        decoded=self.tokenizer.batch_decode(out,skip_special_tokens=True)
+        return restore(decoded[0] if decoded else safe,p)
 
 translator=LocalTranslator()
 
