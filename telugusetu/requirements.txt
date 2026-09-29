@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pymupdf
+reportlab
+python-docx
+indictrans2
+IndicTransToolkit
+sentencepiece
+torch
+ctranslate2
