@@ -2,6 +2,8 @@ import './style.css';
 import * as ort from 'onnxruntime-web';
 import { PreTrainedTokenizer } from '@huggingface/transformers';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
