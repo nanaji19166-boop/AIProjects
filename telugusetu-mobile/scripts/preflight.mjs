@@ -42,7 +42,7 @@ ip.resetQueue();
 const [prepared]=ip.preprocessBatch(['The Prime Minister addressed the nation yesterday evening.'],{srcLang:'eng_Latn',tgtLang:'tel_Telu'});
 assert.match(prepared,/^eng_Latn tel_Telu /);
 const [post]=ip.postprocessBatch(['प्रधानमंत्री ने राष्ट्र को संबोधित किया ।'],{lang:'tel_Telu'});
-assert.match(post,/^[\\u0C00-\\u0C7F]/);
+assert.match(post,/^[\u0C00-\u0C7F]/);
 
 const requiredModelAssets=['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json'];
 assert.deepEqual(requiredModelAssets,['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json']);
