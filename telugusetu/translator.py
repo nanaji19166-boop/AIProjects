@@ -50,10 +50,14 @@ class IndicTransONNX:
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
         opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+        # Free Render has only 512 MB RAM. Avoid ONNX Runtime weight prepacking,
+        # which can create large temporary copies of the shared decoder weights.
+        opts.add_session_config_entry("session.disable_prepacking", "1")
         opts.enable_cpu_mem_arena = False
         opts.enable_mem_pattern = False
         opts.enable_mem_reuse = True
+        opts.add_session_config_entry("session.prepack.enable_parallel", "0")
         providers = ["CPUExecutionProvider"]
 
         # Keep only encoder + one decoder graph in RAM. The previous
