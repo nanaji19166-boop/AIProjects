@@ -36,6 +36,16 @@ jobs:
         working-directory: telugusetu-mobile
         run: npm run preflight
 
+      - name: Bundle Noto Sans Telugu fonts
+        working-directory: telugusetu-mobile
+        run: |
+          mkdir -p public/fonts
+          curl -fL --retry 3 --retry-delay 2 -o public/fonts/NotoSansTelugu-Regular.ttf https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Regular.ttf
+          curl -fL --retry 3 --retry-delay 2 -o public/fonts/NotoSansTelugu-Bold.ttf https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Bold.ttf
+          test -s public/fonts/NotoSansTelugu-Regular.ttf
+          test -s public/fonts/NotoSansTelugu-Bold.ttf
+          ls -lh public/fonts
+
       - name: Build web app
         working-directory: telugusetu-mobile
         run: npm run build
