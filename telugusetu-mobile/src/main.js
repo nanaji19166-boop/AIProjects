@@ -97,7 +97,10 @@ $('analyze').onclick=async()=>{
 };
 
 async function loadTokenizer(fileName){
-  const [j,meta,gen]=await Promise.all([fetch(MODEL+fileName).then(r=>r.json()),fetch(MODEL+F.meta).then(r=>r.json()),fetch(MODEL+F.gen).then(r=>r.json())]);
+  const jBlob=await modelAsset(fileName,fileName===F.srcTok?'English tokenizer':'Telugu tokenizer',0,2);
+  const metaBlob=await modelAsset(F.meta,'Tokenizer metadata',2,3);
+  const genBlob=await modelAsset(F.gen,'Generation config',3,4);
+  const j=JSON.parse(await jBlob.text()),meta=JSON.parse(await metaBlob.text()),gen=JSON.parse(await genBlob.text());
   const cfg={model_max_length:256,pad_token:'<pad>',unk_token:'<unk>',bos_token:'<s>',eos_token:'</s>',padding_side:'right',truncation_side:'right'};
   return {tok:new PreTrainedTokenizer(j,cfg),meta,gen};
 }
