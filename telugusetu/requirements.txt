@@ -4,13 +4,7 @@ python-multipart==0.0.20
 pymupdf==1.25.3
 reportlab==4.2.5
 python-docx==1.1.2
-transformers>=4.47.1,<5
-torch==2.5.1
-sentencepiece==0.2.0
-IndicTransToolkit
-safetensors==0.5.2
-nltk==3.9.1
-sacremoses==0.1.1
-mosestokenizer==1.0.0
-regex==2024.11.6
-accelerate==1.2.1
+onnxruntime==1.20.1
+tokenizers==0.21.0
+huggingface-hub==0.27.0
+numpy==2.1.3
