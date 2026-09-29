@@ -42,6 +42,14 @@ function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(D
 function openModelDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(MODEL_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(MODEL_STORE);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function getModelAsset(key){const db=await openModelDB();return new Promise((res,rej)=>{const t=db.transaction(MODEL_STORE,'readonly'),r=t.objectStore(MODEL_STORE).get(key);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error);});}
 async function putModelAsset(key,blob){const db=await openModelDB();return new Promise((res,rej)=>{const t=db.transaction(MODEL_STORE,'readwrite');t.objectStore(MODEL_STORE).put(blob,key);t.oncomplete=res;t.onerror=()=>rej(t.error);});}
+async function cleanupOldModelAssets(){
+  const db=await openModelDB();
+  return new Promise((res,rej)=>{
+    const t=db.transaction(MODEL_STORE,'readwrite'),store=t.objectStore(MODEL_STORE),r=store.openCursor();
+    r.onsuccess=()=>{const cur=r.result;if(!cur){return;}if(typeof cur.key==='string'&&!cur.key.startsWith(MODEL_VERSION+':'))cur.delete();cur.continue();};
+    t.oncomplete=res;t.onerror=()=>rej(t.error);
+  });
+}
 function modelProgress(p,text){$('bar').style.width=p+'%';$('progressText').textContent=p+'%';$('detail').textContent=text;}
 async function modelAsset(fileName,label,start,end){const key=MODEL_VERSION+':'+fileName;const cached=await getModelAsset(key).catch(()=>null);if(cached){modelProgress(end,label+' already saved on this phone.');return cached;}modelProgress(start,label+' downloading…');const response=await fetch(MODEL+fileName);if(!response.ok)throw new Error('Model download failed for '+fileName+' (HTTP '+response.status+').');const blob=await response.blob();try{await putModelAsset(key,blob);}catch(e){console.warn('Model cache write failed:',e);}modelProgress(end,label+' downloaded.');return blob;}
 async function saveJob(job){const db=await openDB();return new Promise((res,rej)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(job);t.oncomplete=res;t.onerror=()=>rej(t.error);});}
@@ -151,6 +159,7 @@ async function ensureModel(){
   $('progressWrap').classList.remove('hidden');
   modelProgress(1,'Checking saved model files on this phone…');
   try{await navigator.storage?.persist?.();}catch{}
+  try{await cleanupOldModelAssets();}catch(e){console.warn('Old model cache cleanup failed:',e);}
   const pair=await loadTokenizerPair();
   const gen=await loadGenerationConfig();
   const ip=new IndicProcessor({inference:true});
