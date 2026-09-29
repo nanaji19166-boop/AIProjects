@@ -27,7 +27,7 @@ assert.equal(new Set(qs).size,115);
 assert.equal(opts.length,460);
 assert.deepEqual(normalize(['Intro Q114. First Q115. Second']),['Intro','Q114. First','Q115. Second']);
 assert.match(main,/BigInt64Array\.from\(a,BigInt\)/);
-assert.match(main,/createSession\(modelBlob,dataBlob,dataName\)/);
+assert.match(main,/createSessionFromBlobs\(modelBlob,dataBlob,dataName\)/);
 assert.match(main,/externalData:\[\{path:dataName,data:dataBytes\}\]/);
 assert.match(main,/modelAsset\(F\.encData/);
 assert.match(main,/modelAsset\(F\.decData/);
