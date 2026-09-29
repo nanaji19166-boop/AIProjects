@@ -1,8 +1,6 @@
 import './style.css';
 import * as ort from 'onnxruntime-web';
-import { PreTrainedTokenizer } from '@huggingface/transformers';
-import SanscriptModule from '@indic-transliteration/sanscript';
-const Sanscript = SanscriptModule.default || SanscriptModule;
+import { IndicProcessor, IT2Tokenizer } from './indictrans2.js';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -15,12 +13,12 @@ import { Share } from '@capacitor/share';
 const MODEL = 'https://huggingface.co/hari31416/indictrans2-en-indic-dist-200M-ONNX-int8/resolve/main/';
 const F = {
   enc:'encoder_model.onnx', encData:'encoder_model.onnx.data',
-  dec:'decoder_model.onnx', decData:'decoder_shared.onnx.data',
+  dec:'decoder_model.onnx', decData:'decoder_shared.onnx.data', decPast:'decoder_with_past_model.onnx',
   srcTok:'tokenizer_src.json', tgtTok:'tokenizer_tgt.json',
   meta:'tokenizer_meta.json', gen:'generation_config.json'
 };
 const DB_NAME='telugusetu-local-v1', DB_VERSION=1, STORE='jobs';
-const MODEL_DB='telugusetu-model-v1', MODEL_STORE='assets', MODEL_VERSION='v3';
+const MODEL_DB='telugusetu-model-v1', MODEL_STORE='assets', MODEL_VERSION='v4';
 ort.env.wasm.numThreads=1;
 ort.env.wasm.proxy=false;
 ort.env.logLevel='error';
@@ -119,21 +117,31 @@ $('analyze').onclick=async()=>{
   }catch(e){console.error(e);msg('PDF analysis failed: '+e.message);}
 };
 
-async function loadTokenizer(fileName){
-  const jBlob=await modelAsset(fileName,fileName===F.srcTok?'English tokenizer':'Telugu tokenizer',0,2);
-  const metaBlob=await modelAsset(F.meta,'Tokenizer metadata',2,3);
-  const genBlob=await modelAsset(F.gen,'Generation config',3,4);
-  const j=JSON.parse(await jBlob.text()),meta=JSON.parse(await metaBlob.text()),gen=JSON.parse(await genBlob.text());
-  const cfg={model_max_length:256,pad_token:'<pad>',unk_token:'<unk>',bos_token:'<s>',eos_token:'</s>',padding_side:'right',truncation_side:'right'};
-  return {tok:new PreTrainedTokenizer(j,cfg),meta,gen};
+async function loadTokenizerPair(){
+  const srcBlob=await modelAsset(F.srcTok,'English tokenizer',0,2);
+  const tgtBlob=await modelAsset(F.tgtTok,'Telugu tokenizer',2,4);
+  const metaBlob=await modelAsset(F.meta,'Tokenizer metadata',4,5);
+  const srcJson=JSON.parse(await srcBlob.text());
+  const tgtJson=JSON.parse(await tgtBlob.text());
+  const meta=JSON.parse(await metaBlob.text());
+  if(Number(meta.src_dict_size)!==32322||Number(meta.tgt_dict_size)!==122672||Number(meta.unk_id)!==3){
+    throw new Error('Unexpected IndicTrans2 tokenizer metadata.');
+  }
+  return {tok:new IT2Tokenizer(srcJson,tgtJson,meta),meta};
 }
-async function createSession(modelBlob,dataBlob,dataName){
+async function loadGenerationConfig(){
+  const genBlob=await modelAsset(F.gen,'Generation config',5,6);
+  return JSON.parse(await genBlob.text());
+}
+async function createSessionFromBlobs(modelBlob,dataBlob,dataName){
   const modelBytes=new Uint8Array(await modelBlob.arrayBuffer());
   const dataBytes=new Uint8Array(await dataBlob.arrayBuffer());
   return ort.InferenceSession.create(modelBytes,{
     executionProviders:['wasm'],
     executionMode:'sequential',
     graphOptimizationLevel:'disabled',
+    enableCpuMemArena:false,
+    enableMemPattern:false,
     externalData:[{path:dataName,data:dataBytes}]
   });
 }
@@ -143,51 +151,74 @@ async function ensureModel(){
   $('progressWrap').classList.remove('hidden');
   modelProgress(1,'Checking saved model files on this phone…');
   try{await navigator.storage?.persist?.();}catch{}
-  const src=await loadTokenizer(F.srcTok);
-  const tgt=await loadTokenizer(F.tgtTok);
-  const encBlob=await modelAsset(F.enc,'Encoder model',8,12);
-  const encData=await modelAsset(F.encData,'Encoder weights',12,35);
-  modelProgress(38,'Opening encoder…');
-  const enc=await createSession(encBlob,encData,F.encData);
-  const decBlob=await modelAsset(F.dec,'Decoder model',42,45);
-  const decData=await modelAsset(F.decData,'Decoder weights',45,88);
-  modelProgress(92,'Opening decoder…');
-  const dec=await createSession(decBlob,decData,F.decData);
-  model={srcTok:src.tok,tgtTok:tgt.tok,srcDictSize:Number(src.meta.src_dict_size||32322),tgtDictSize:Number(src.meta.tgt_dict_size||122672),unkId:Number(src.meta.unk_id||3),startId:Number(src.gen.decoder_start_token_id||2),eosId:Number(src.gen.eos_token_id||2),enc,dec};
+  const pair=await loadTokenizerPair();
+  const gen=await loadGenerationConfig();
+  const ip=new IndicProcessor({inference:true});
+  const encBlob=await modelAsset(F.enc,'Encoder graph',8,10);
+  const encData=await modelAsset(F.encData,'Encoder weights',10,34);
+  modelProgress(36,'Opening encoder…');
+  const enc=await createSessionFromBlobs(encBlob,encData,F.encData);
+  const decBlob=await modelAsset(F.dec,'Decoder graph',38,40);
+  const decPastBlob=await modelAsset(F.decPast,'Decoder-with-past graph',40,42);
+  const decData=await modelAsset(F.decData,'Shared decoder weights',42,84);
+  modelProgress(86,'Opening decoder…');
+  const dec=await createSessionFromBlobs(decBlob,decData,F.decData);
+  modelProgress(90,'Opening decoder-with-past…');
+  const decPast=await createSessionFromBlobs(decPastBlob,decData,F.decData);
+  const numLayers=(dec.outputNames.length-1)/4;
+  if(!Number.isInteger(numLayers)||numLayers<=0)throw new Error('Unexpected IndicTrans2 decoder output layout.');
+  model={tok:pair.tok,meta:pair.meta,ip,startId:Number(gen.decoder_start_token_id??2),eosId:Number(gen.eos_token_id??2),numLayers,enc,dec,decPast};
   modelProgress(100,'Translation engine ready on this phone.');
   msg('Translation engine ready. Future runs reuse the saved model files.');
   return model;
 }
 function i64(a){return new ort.Tensor('int64',BigInt64Array.from(a,BigInt),[1,a.length]);}
 
+function greedyArgmax(data,dims){
+  const [B,T,V]=dims;
+  const lastOff=(B-1)*T*V+(T-1)*V;
+  let best=-Infinity,bestIdx=0;
+  for(let i=0;i<V;i++){const v=data[lastOff+i];if(v>best){best=v;bestIdx=i;}}
+  return bestIdx;
+}
+function collectPresents(out,numLayers){
+  const kinds=['decoder.key','decoder.value','encoder.key','encoder.value'];
+  const arr=new Array(numLayers*4);
+  for(let i=0;i<numLayers;i++)for(let j=0;j<4;j++)arr[i*4+j]=out[`present.${i}.${kinds[j]}`];
+  if(arr.some(x=>!x))throw new Error('IndicTrans2 decoder cache outputs are incomplete.');
+  return arr;
+}
 async function translateText(text){
   const m=await ensureModel();
-  // IndicTrans2's BPE tokenizer has an extended vocabulary, but the ONNX
-  // encoder embedding is only 32,322 entries. The official ONNX helper
-  // remaps every source token >= src_dict_size to <unk> (id 3) before
-  // calling the encoder. Without this remap, Gather throws an out-of-bounds
-  // error such as idx=32333, which is the failure seen on the phone.
-  const prepared='eng_Latn tel_Telu '+text;
-  const enc=m.srcTok(prepared,{truncation:true,max_length:256});
-  const rawIds=Array.from(enc.input_ids.data,Number);
-  const ids=rawIds.map(id=>id>=m.srcDictSize?m.unkId:id);
-  const mask=Array.from(enc.attention_mask.data,Number);
+  m.ip.resetQueue();
+  const [prepared]=m.ip.preprocessBatch([text],{srcLang:'eng_Latn',tgtLang:'tel_Telu'});
+  const encoded=m.tok.encodeSrc(prepared);
+  let ids=encoded.input_ids;
+  if(ids.length>256)ids=ids.slice(0,255).concat(ids[ids.length-1]);
+  const mask=encoded.attention_mask.slice(0,ids.length);
   const encOut=await m.enc.run({input_ids:i64(ids),attention_mask:i64(mask)});
-  const hidden=encOut.last_hidden_state||encOut[Object.keys(encOut)[0]];
-  const generated=[m.startId];
-  for(let step=0;step<96;step++){
-    const out=await m.dec.run({input_ids:i64(generated),encoder_hidden_states:hidden,encoder_attention_mask:i64(mask)});
-    const logits=out.logits||out[Object.keys(out)[0]],dims=logits.dims,row=logits.data.slice((dims[1]-1)*dims[2],dims[1]*dims[2]);
-    let best=0,bestV=-Infinity;for(let i=0;i<row.length;i++){if(row[i]>bestV){bestV=row[i];best=i;}}
-    generated.push(best);if(best===m.eosId)break;
+  const hidden=encOut.last_hidden_state;
+  let out=await m.dec.run({input_ids:i64([m.startId]),encoder_hidden_states:hidden,encoder_attention_mask:i64(mask)});
+  let next=greedyArgmax(out.logits.data,out.logits.dims);
+  const generated=[m.startId,next];
+  let presents=collectPresents(out,m.numLayers);
+  for(let step=1;step<128&&next!==m.eosId;step++){
+    const feeds={input_ids:i64([next]),encoder_attention_mask:i64(mask)};
+    const kinds=['decoder.key','decoder.value','encoder.key','encoder.value'];
+    for(let i=0;i<presents.length;i++){
+      const layer=Math.floor(i/4),kind=kinds[i%4];
+      feeds[`past_key_values.${layer}.${kind}`]=presents[i];
+    }
+    out=await m.decPast.run(feeds);
+    next=greedyArgmax(out.logits.data,out.logits.dims);
+    generated.push(next);
+    presents=collectPresents(out,m.numLayers);
+    if(step%8===0)await new Promise(r=>setTimeout(r,0));
   }
-  const safeGenerated=generated.map(id=>id>=m.tgtDictSize?m.unkId:id);
-  const rawDecoded=m.tgtTok.decode(safeGenerated,{skip_special_tokens:true,clean_up_tokenization_spaces:true}).trim();
-  // IndicTrans2's shared internal representation is Devanagari. For Telugu,
-  // convert that decoded representation to Telugu script before exporting.
-  try{return Sanscript.t(rawDecoded,'devanagari','telugu').trim();}catch{return rawDecoded;}
+  const raw=m.tok.decodeTgt(generated);
+  const [final]=m.ip.postprocessBatch([raw],{lang:'tel_Telu'});
+  return final.trim();
 }
-
 function translatable(item){return item.body.trim()&&!/^\d[\d\s|/_.:\-]*$/.test(item.body.trim());}
 function completedCount(){return currentJob.items.filter(x=>translatable(x)&&x.translated!==null).length;}
 function totalCount(){return currentJob.items.filter(translatable).length;}
