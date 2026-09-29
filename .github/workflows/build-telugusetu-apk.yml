@@ -16,23 +16,28 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: '22'
+          package-manager-cache: false
 
       - name: Install dependencies
         working-directory: telugusetu-mobile
-        run: npm install
+        run: npm install --no-audit --no-fund
+
+      - name: Verify Capacitor CLI
+        working-directory: telugusetu-mobile
+        run: npx cap --version
 
       - name: Build web app
         working-directory: telugusetu-mobile
         run: npm run build
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -46,13 +51,23 @@ jobs:
         working-directory: telugusetu-mobile
         run: npx cap add android
 
-      - name: Copy web assets
+      - name: Sync Capacitor Android project
         working-directory: telugusetu-mobile
-        run: npx cap copy android
+        run: npx cap sync android
+
+      - name: Verify Gradle environment
+        working-directory: telugusetu-mobile/android
+        run: ./gradlew --version
 
       - name: Build debug APK
         working-directory: telugusetu-mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK
+        working-directory: telugusetu-mobile/android
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
