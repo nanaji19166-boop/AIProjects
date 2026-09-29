@@ -37,7 +37,6 @@ class IndicTransONNX:
         if "/" in str(model_path) and not Path(model_path).exists():
             model_path = snapshot_download(repo_id=model_path)
         snap = Path(model_path)
-
         self.ip = IndicProcessor(inference=True)
         self.src_tok = Tokenizer.from_file(str(snap / "tokenizer_src.json"))
         self.tgt_tok = Tokenizer.from_file(str(snap / "tokenizer_tgt.json"))
@@ -46,7 +45,6 @@ class IndicTransONNX:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
         self.start_id = int(cfg.get("decoder_start_token_id", 2))
         self.eos_id = int(cfg.get("eos_token_id", 2))
-        self.snap = snap
 
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 1
@@ -55,54 +53,22 @@ class IndicTransONNX:
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
         opts.enable_cpu_mem_arena = False
         opts.enable_mem_pattern = False
+        opts.enable_mem_reuse = True
         providers = ["CPUExecutionProvider"]
 
+        # Keep only encoder + one decoder graph in RAM. The previous
+        # implementation loaded three graphs and then reloaded the first-step
+        # decoder for every sentence, which made long PDFs impractically slow
+        # and could restart a free Render instance.
         self.enc = ort.InferenceSession(
             str(snap / "encoder_model.onnx"), sess_options=opts, providers=providers
         )
-        # Keep only the cached decoder in memory. The first-step decoder is
-        # loaded for one sentence, used once, then released to reduce RAM.
-        self.dec_past = ort.InferenceSession(
-            str(snap / "decoder_with_past_model.onnx"),
-            sess_options=opts, providers=providers
+        self.dec = ort.InferenceSession(
+            str(snap / "decoder_model.onnx"), sess_options=opts, providers=providers
         )
-        self.dec_layers = None
+        self.num_layers = (len(self.dec.get_outputs()) - 1) // 4
 
-    def _past_feed(self, past):
-        feed = {}
-        for i in range(self.dec_layers):
-            b = i * 4
-            feed[f"past_key_values.{i}.decoder.key"] = past[b]
-            feed[f"past_key_values.{i}.decoder.value"] = past[b + 1]
-            feed[f"past_key_values.{i}.encoder.key"] = past[b + 2]
-            feed[f"past_key_values.{i}.encoder.value"] = past[b + 3]
-        return feed
-
-    def _first_step(self, decoder_input_ids, enc_out, attn_mask):
-        import onnxruntime as ort
-        opts = ort.SessionOptions()
-        opts.intra_op_num_threads = 1
-        opts.inter_op_num_threads = 1
-        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
-        opts.enable_cpu_mem_arena = False
-        opts.enable_mem_pattern = False
-        dec = ort.InferenceSession(
-            str(self.snap / "decoder_model.onnx"),
-            sess_options=opts, providers=["CPUExecutionProvider"]
-        )
-        if self.dec_layers is None:
-            self.dec_layers = (len(dec.get_outputs()) - 1) // 4
-        out = dec.run(None, {
-            "input_ids": decoder_input_ids,
-            "encoder_hidden_states": enc_out,
-            "encoder_attention_mask": attn_mask,
-        })
-        del dec
-        gc.collect()
-        return out
-
-    def translate(self, text, max_new_tokens=96):
+    def translate(self, text, max_new_tokens=64):
         if hasattr(self.ip, "_placeholder_entity_maps"):
             try:
                 self.ip._placeholder_entity_maps.queue.clear()
@@ -118,41 +84,30 @@ class IndicTransONNX:
             for i in encoded.ids
         ]], dtype=np.int64)
         mask = np.array([encoded.attention_mask], dtype=np.int64)
+
         enc_out = self.enc.run(
             ["last_hidden_state"], {"input_ids": ids, "attention_mask": mask}
         )[0]
 
-        dec_ids = np.array([[self.start_id]], dtype=np.int64)
-        output_ids = [self.start_id]
-        out = self._first_step(dec_ids, enc_out, mask)
-        past = list(out[1:])
-        next_id = int(np.argmax(out[0][0, -1, :]))
-        output_ids.append(next_id)
-
-        for _ in range(1, max_new_tokens):
+        generated = [self.start_id]
+        for _ in range(max_new_tokens):
+            dec_ids = np.array([generated], dtype=np.int64)
+            out = self.dec.run(None, {
+                "input_ids": dec_ids,
+                "encoder_hidden_states": enc_out,
+                "encoder_attention_mask": mask,
+            })
+            next_id = int(np.argmax(out[0][0, -1, :]))
+            generated.append(next_id)
             if next_id == self.eos_id:
                 break
-            dec_ids = np.array([[next_id]], dtype=np.int64)
-            out = self.dec_past.run(
-                None, {
-                    "input_ids": dec_ids,
-                    "encoder_attention_mask": mask,
-                    **self._past_feed(past),
-                }
-            )
-            past = list(out[1:])
-            next_id = int(np.argmax(out[0][0, -1, :]))
-            output_ids.append(next_id)
 
         safe_ids = [
             i if i < self.meta["tgt_dict_size"] else self.meta["unk_id"]
-            for i in output_ids
+            for i in generated
         ]
         raw = self.tgt_tok.decode(safe_ids, skip_special_tokens=True)
-        result = self.ip.postprocess_batch([raw], lang=TGT_LANG)[0]
-        del enc_out, past, out
-        gc.collect()
-        return result
+        return self.ip.postprocess_batch([raw], lang=TGT_LANG)[0]
 
 
 class LocalTranslator:
