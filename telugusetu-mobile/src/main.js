@@ -18,7 +18,7 @@ const F = {
   meta:'tokenizer_meta.json', gen:'generation_config.json'
 };
 const DB_NAME='telugusetu-local-v1', DB_VERSION=1, STORE='jobs';
-const MODEL_DB='telugusetu-model-v1', MODEL_STORE='assets', MODEL_VERSION='v2';
+const MODEL_DB='telugusetu-model-v1', MODEL_STORE='assets', MODEL_VERSION='v3';
 ort.env.wasm.numThreads=1;
 ort.env.wasm.proxy=false;
 ort.env.logLevel='error';
@@ -97,10 +97,10 @@ async function extractPdf(file){
 }
 function analyzePages(pages){
   const all=pages.flatMap(p=>p.lines);
-  const qs=all.filter(l=>/^\s*Q\s*\d{1,4}\s*[\.\):\-]/i.test(l));
+  const qs=all.flatMap(l=>[...l.matchAll(/(?:^|\s)Q(?:uestion)?\s*(\d{1,4})\s*[\.\):\-]/gi)].map(m=>m[1]));
   const opts=all.filter(l=>/^\s*[A-D]\s*[\.\):\-]\s+/i.test(l));
   const ans=all.filter(l=>/^\s*(answer|ans\.?|correct\s+answer|explanation)\s*[:\-]/i.test(l));
-  return {pages:pages.length,questions:new Set(qs.map(x=>x.match(/Q\s*(\d+)/i)?.[1])).size,options:opts.length,answerMarkers:ans.length,nonempty:pages.filter(p=>p.lines.length).length};
+  return {pages:pages.length,questions:new Set(qs).size,options:opts.length,answerMarkers:ans.length,nonempty:pages.filter(p=>p.lines.length).length};
 }
 
 $('analyze').onclick=async()=>{
@@ -126,7 +126,14 @@ async function loadTokenizer(fileName){
   return {tok:new PreTrainedTokenizer(j,cfg),meta,gen};
 }
 async function createSession(modelBlob,dataBlob,dataName){
-  return ort.InferenceSession.create(modelBlob,{executionProviders:['wasm'],executionMode:'sequential',graphOptimizationLevel:'disabled',externalData:[{path:dataName,data:dataBlob}]});
+  const modelBytes=new Uint8Array(await modelBlob.arrayBuffer());
+  const dataBytes=new Uint8Array(await dataBlob.arrayBuffer());
+  return ort.InferenceSession.create(modelBytes,{
+    executionProviders:['wasm'],
+    executionMode:'sequential',
+    graphOptimizationLevel:'disabled',
+    externalData:[{path:dataName,data:dataBytes}]
+  });
 }
 async function ensureModel(){
   if(model)return model;
@@ -197,7 +204,7 @@ function wrapLines(font,text,size,max){
 }
 async function buildPdf(job){
   const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
-  const fontBytes=await fetch('https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Regular.ttf').then(r=>r.arrayBuffer());
+  const fontBytes=await fetch('./fonts/NotoSansTelugu-Regular.ttf').then(r=>{if(!r.ok)throw new Error('Bundled Noto Sans Telugu font is missing.');return r.arrayBuffer();});
   const font=await pdf.embedFont(fontBytes,{subset:true});
   for(const page of job.pages){
     const p=pdf.addPage([595.28,841.89]);let y=805;
@@ -211,7 +218,7 @@ async function buildPdf(job){
 }
 async function buildDocx(job){
   const children=[];
-  for(const page of job.pages){for(const item of job.items.filter(x=>x.page===page.page)){const text=(item.marker?item.marker+' ':'')+(item.translated??item.body);if(text.trim())children.push(new Paragraph({children:[new TextRun({text,font:'Noto Sans Telugu',size:21})]}));}children.push(new Paragraph({text:''}));}
+  for(const page of job.pages){for(const item of job.items.filter(x=>x.page===page.page)){const text=(item.marker?item.marker+' ':'')+(item.translated??item.body);if(text.trim())children.push(new Paragraph({children:[new TextRun({text,font:'Noto Sans Telugu',bold:/^Q(?:uestion)?\s*\d+/i.test(item.marker),size:21})]}));}children.push(new Paragraph({text:''}));}
   return Packer.toBlob(new Document({sections:[{children}]}));
 }
 function blobToBase64(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(blob);});}
