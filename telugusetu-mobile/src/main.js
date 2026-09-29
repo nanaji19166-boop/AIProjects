@@ -27,7 +27,7 @@ app.innerHTML=
 '<label class="drop" id="drop"><span id="fileLabel">Tap to select PDF</span><input id="file" type="file" accept=".pdf,application/pdf" hidden></label>'+
 '<button id="analyze" class="primary">Analyze PDF</button>'+
 '<div id="analysis" class="hidden"></div>'+
-'<div id="actions" class="hidden"><button id="translate" class="primary">Translate to Telugu</button><button id="resume" class="secondary hidden">Resume Translation</button><button id="partial" class="secondary hidden">Download Partial Translation</button></div>'+
+'<div id="actions" class="hidden"><button id="translate" class="primary">Translate to Telugu</button><button id="resume" class="secondary hidden">Resume Translation</button><button id="partial" class="secondary hidden">Download Partial PDF</button><button id="partialDocx" class="secondary hidden">Download Partial DOCX</button></div>'+
 '<div id="progressWrap" class="hidden"><div class="progress"><div id="bar"></div></div><div id="progressText">0%</div><div id="detail"></div></div>'+
 '<div id="downloads"></div><div id="message" class="small"></div></section></main>';
 
@@ -83,7 +83,7 @@ $('analyze').onclick=async()=>{
     currentJob={id:crypto.randomUUID(),name:selectedFile.name,pages,items,stats,createdAt:Date.now(),updatedAt:Date.now(),status:'analyzed'};
     await saveJob(currentJob);
     $('analysis').innerHTML='<h3>Analysis</h3><div class="stats"><div><b>Pages</b><span>'+stats.pages+'</span></div><div><b>Questions</b><span>'+stats.questions+'</span></div><div><b>Options</b><span>'+stats.options+'</span></div><div><b>Nonempty pages</b><span>'+stats.nonempty+'</span></div><div><b>Answer markers</b><span>'+stats.answerMarkers+'</span></div></div>';
-    $('analysis').classList.remove('hidden');$('actions').classList.remove('hidden');$('translate').classList.remove('hidden');$('resume').classList.add('hidden');$('partial').classList.add('hidden');
+    $('analysis').classList.remove('hidden');$('actions').classList.remove('hidden');$('translate').classList.remove('hidden');$('resume').classList.add('hidden');$('partial').classList.add('hidden');$('partialDocx').classList.add('hidden');
     msg('Analysis complete. Translation will run locally on this phone.');
   }catch(e){console.error(e);msg('PDF analysis failed: '+e.message);}
 };
@@ -142,7 +142,7 @@ async function translateLoop(){
       $('detail').textContent='Translating question '+(item.q||'?')+' • '+(done+1)+' of '+total;
       item.translated=await translateText(item.body);done++;
       currentJob.updatedAt=Date.now();currentJob.status=done===total?'complete':'paused';await saveJob(currentJob);
-      const pct=Math.round(done*100/Math.max(total,1));$('bar').style.width=pct+'%';$('progressText').textContent=pct+'%';$('partial').classList.remove('hidden');
+      const pct=Math.round(done*100/Math.max(total,1));$('bar').style.width=pct+'%';$('progressText').textContent=pct+'%';$('partial').classList.remove('hidden');$('partialDocx').classList.remove('hidden');
     }
     if(done===total){currentJob.status='complete';await saveJob(currentJob);$('bar').style.width='100%';$('progressText').textContent='100%';$('detail').textContent='All translatable lines completed.';msg('Translation complete.');await makeCompleteOutputs();}
     else{currentJob.status='paused';await saveJob(currentJob);$('resume').classList.remove('hidden');msg('Translation paused safely. You can resume later.');}
@@ -195,6 +195,11 @@ $('partial').onclick=async()=>{
   try{msg('Creating partial translated PDF…');const bytes=await buildPdf(currentJob);await saveAndShare(new Blob([bytes],{type:'application/pdf'}),currentJob.name.replace(/\.pdf$/i,'')+'_Telugu_Partial.pdf');msg('Partial PDF saved and ready to share.');}
   catch(e){msg('Partial PDF failed: '+e.message);}
 };
+$('partialDocx').onclick=async()=>{
+  if(!currentJob)return;
+  try{msg('Creating partial translated DOCX…');const blob=await buildDocx(currentJob);await saveAndShare(blob,currentJob.name.replace(/\.pdf$/i,'')+'_Telugu_Partial.docx');msg('Partial DOCX saved and ready to share.');}
+  catch(e){msg('Partial DOCX failed: '+e.message);}
+};
 $('translate').onclick=translateLoop;
 $('resume').onclick=translateLoop;
 
@@ -205,7 +210,7 @@ $('resume').onclick=translateLoop;
       currentJob=latest;$('fileLabel').textContent=latest.name;
       const done=completedCount(),total=totalCount();
       $('analysis').innerHTML='<h3>Saved translation</h3><div class="stats"><div><b>Pages</b><span>'+latest.stats.pages+'</span></div><div><b>Questions</b><span>'+latest.stats.questions+'</span></div><div><b>Saved progress</b><span>'+done+' / '+total+'</span></div></div>';
-      $('analysis').classList.remove('hidden');$('actions').classList.remove('hidden');$('partial').classList.remove('hidden');
+      $('analysis').classList.remove('hidden');$('actions').classList.remove('hidden');$('partial').classList.remove('hidden');$('partialDocx').classList.remove('hidden');
       if(done<total)$('resume').classList.remove('hidden');else{ $('translate').classList.add('hidden');$('bar').style.width='100%';$('progressText').textContent='100%';}
       $('progressWrap').classList.remove('hidden');msg('A saved translation is available. Resume whenever you are ready.');
     }
