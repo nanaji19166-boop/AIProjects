@@ -69,7 +69,7 @@ function normalizeExtractedLines(lines){
   for(const raw of lines){
     const line=raw.trim();
     if(!line)continue;
-    const matches=[...line.matchAll(/(?:^|\\s)(Q(?:uestion)?\\s*\\d{1,4}\\s*[\\.\\):\\-])(?=\\s|$)/gi)];
+    const matches=[...line.matchAll(/(?:^|\s)(Q(?:uestion)?\s*\d{1,4}\s*[\.\):\-])(?=\s|$)/gi)];
     if(matches.length<=1){out.push(line);continue;}
     let first=matches[0];
     if(first.index>0){
