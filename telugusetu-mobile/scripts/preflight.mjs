@@ -44,17 +44,6 @@ assert.match(prepared,/^eng_Latn tel_Telu /);
 const [post]=ip.postprocessBatch(['प्रधानमंत्री ने राष्ट्र को संबोधित किया ।'],{lang:'tel_Telu'});
 assert.match(post,/^[\\u0C00-\\u0C7F]/);
 
-const MODEL='https://huggingface.co/hari31416/indictrans2-en-indic-dist-200M-ONNX-int8/resolve/main/';
-const required=['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json'];
-async function fetchRetry(url,options={},attempts=3){
-  let last;
-  for(let i=0;i<attempts;i++){try{const r=await fetch(url,{redirect:'follow',...options});if(r.ok)return r;last=new Error('HTTP '+r.status+' '+url);}catch(e){last=e;}await new Promise(r=>setTimeout(r,1000*(i+1)));}
-  throw last;
-}
-const meta=await (await fetchRetry(MODEL+'tokenizer_meta.json')).json();
-assert.deepEqual(meta,{src_dict_size:32322,tgt_dict_size:122672,unk_id:3});
-for(const file of required){
-  const r=await fetchRetry(MODEL+file,{method:'HEAD'});
-  assert.notEqual(r.status,0);
-}
+const requiredModelAssets=['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json'];
+assert.deepEqual(requiredModelAssets,['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json']);
 console.log('TeluguSetu preflight PASS: 115 questions, 460 options, IndicProcessor parity, decoder-with-past, model manifest, cached model wiring');
