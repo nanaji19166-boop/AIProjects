@@ -6,6 +6,10 @@ on:
       - 'telugusetu-mobile/**'
       - '.github/workflows/build-telugusetu-apk.yml'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'telugusetu-mobile/**'
+      - '.github/workflows/build-telugusetu-apk.yml'
 
 permissions:
   contents: write
@@ -42,8 +46,10 @@ jobs:
           mkdir -p public/fonts
           curl -fL --retry 3 --retry-delay 2 -o public/fonts/NotoSansTelugu-Regular.ttf https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Regular.ttf
           curl -fL --retry 3 --retry-delay 2 -o public/fonts/NotoSansTelugu-Bold.ttf https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Bold.ttf
+          curl -fL --retry 3 --retry-delay 2 -o public/fonts/OFL.txt https://raw.githubusercontent.com/notofonts/telugu/main/OFL.txt
           test -s public/fonts/NotoSansTelugu-Regular.ttf
           test -s public/fonts/NotoSansTelugu-Bold.ttf
+          test -s public/fonts/OFL.txt
           ls -lh public/fonts
 
       - name: Build web app
@@ -94,10 +100,10 @@ jobs:
       - name: Publish installable APK release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: telugusetu-mobile-latest
-          name: TeluguSetu Mobile Latest
+          tag_name: telugusetu-mobile-${{ github.run_number }}
+          name: TeluguSetu Mobile #${{ github.run_number }}
           prerelease: true
           files: telugusetu-mobile/android/app/build/outputs/apk/debug/app-debug.apk
           body: |
-            Latest TeluguSetu Android debug APK. Install directly on Android; Play Store is not required.
+            TeluguSetu Android debug APK from GitHub Actions run #${{ github.run_number }}. Install directly on Android; Play Store is not required.
             Translation runs locally on the device. The model is downloaded on first use.

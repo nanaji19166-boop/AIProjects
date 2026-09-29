@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import * as ort from 'onnxruntime-web';
+import { IndicProcessor, IT2Tokenizer } from '../src/indictrans2.js';
 
 const main = await fs.readFile(new URL('../src/main.js', import.meta.url), 'utf8');
 const tensor = new ort.Tensor('int64', BigInt64Array.from([4, 17, 0], BigInt), [1, 3]);
@@ -25,9 +26,25 @@ const opts=all.filter(l=>/^\s*[A-D]\s*[\.\):\-]\s+/.test(l));
 assert.equal(new Set(qs).size,115);
 assert.equal(opts.length,460);
 assert.deepEqual(normalize(['Intro Q114. First Q115. Second']),['Intro','Q114. First','Q115. Second']);
+assert.match(main,/import ['"]regenerator-runtime\/runtime\.js['"]/);
 assert.match(main,/BigInt64Array\.from\(a,BigInt\)/);
-assert.match(main,/createSession\(modelBlob,dataBlob,dataName\)/);
+assert.match(main,/createSessionFromBlobs\(modelBlob,dataBlob,dataName\)/);
 assert.match(main,/externalData:\[\{path:dataName,data:dataBytes\}\]/);
 assert.match(main,/modelAsset\(F\.encData/);
 assert.match(main,/modelAsset\(F\.decData/);
-console.log('TeluguSetu preflight PASS: int64, 115 questions, 460 options, cached model wiring');
+assert.match(main,/modelAsset\(F\.decPast/);
+assert.match(main,/decoder_with_past_model\.onnx/);
+assert.match(main,/preprocessBatch\(\[text\]/);
+assert.match(main,/postprocessBatch\(\[raw\]/);
+assert.match(main,/collectPresents/);
+assert.match(main,/MODEL_VERSION='v4'/);
+const ip=new IndicProcessor({inference:true});
+ip.resetQueue();
+const [prepared]=ip.preprocessBatch(['The Prime Minister addressed the nation yesterday evening.'],{srcLang:'eng_Latn',tgtLang:'tel_Telu'});
+assert.match(prepared,/^eng_Latn tel_Telu /);
+const [post]=ip.postprocessBatch(['प्रधानमंत्री ने राष्ट्र को संबोधित किया ।'],{lang:'tel_Telu'});
+assert.match(post,/^[\u0C00-\u0C7F]/);
+
+const requiredModelAssets=['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json'];
+assert.deepEqual(requiredModelAssets,['encoder_model.onnx','encoder_model.onnx.data','decoder_model.onnx','decoder_with_past_model.onnx','decoder_shared.onnx.data','tokenizer_src.json','tokenizer_tgt.json','tokenizer_meta.json','generation_config.json']);
+console.log('TeluguSetu preflight PASS: 115 questions, 460 options, IndicProcessor parity, decoder-with-past, model manifest, cached model wiring');
