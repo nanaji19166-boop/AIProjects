@@ -148,8 +148,10 @@ def extract_pages(pdf):
 def analyze_pdf(pdf):
     pages = extract_pages(pdf)
     full = "\n".join(x["text"] for x in pages)
-    q = re.findall(r"(?m)^\s*(?:Q(?:uestion)?\s*)?(\d{1,4})[).:\-\s]", full, re.I)
-    opts = re.findall(r"(?m)^\s*[A-D][).:\-\s]", full)
+    # The source format uses Q1., Q2., ... as the question markers.
+    # Do not count numbered statements (1., 2., dates, years, etc.) as questions.
+    q = re.findall(r"(?mi)^\s*Q\s*(\d{1,4})\s*[\.\):\-]", full)
+    opts = re.findall(r"(?mi)^\s*[A-D]\s*[\.\):\-]\s+", full)
     answers = re.findall(
         r"(?im)^\s*(answer|ans\.?|correct answer|explanation)\s*[:\-]", full
     )
