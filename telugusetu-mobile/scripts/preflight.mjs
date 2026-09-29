@@ -26,6 +26,7 @@ const opts=all.filter(l=>/^\s*[A-D]\s*[\.\):\-]\s+/.test(l));
 assert.equal(new Set(qs).size,115);
 assert.equal(opts.length,460);
 assert.deepEqual(normalize(['Intro Q114. First Q115. Second']),['Intro','Q114. First','Q115. Second']);
+assert.match(main,/import ['"]regenerator-runtime\/runtime\.js['"]/);
 assert.match(main,/BigInt64Array\.from\(a,BigInt\)/);
 assert.match(main,/createSessionFromBlobs\(modelBlob,dataBlob,dataName\)/);
 assert.match(main,/externalData:\[\{path:dataName,data:dataBytes\}\]/);
