@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "preflight": "node scripts/preflight.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^7.4.3",
