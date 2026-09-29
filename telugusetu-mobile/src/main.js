@@ -1,3 +1,4 @@
+import 'regenerator-runtime/runtime.js';
 import './style.css';
 import * as ort from 'onnxruntime-web';
 import { IndicProcessor, IT2Tokenizer } from './indictrans2.js';
