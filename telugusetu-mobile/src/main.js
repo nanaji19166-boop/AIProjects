@@ -111,7 +111,7 @@ async function ensureModel(){
   msg('Translation engine ready.');
   return model;
 }
-function i64(a){return new ort.Tensor('int64',BigInt64Array.from(a.map(Number)),[1,a.length]);}
+function i64(a){return new ort.Tensor('int64',BigInt64Array.from(a,BigInt),[1,a.length]);}
 
 async function translateText(text){
   const m=await ensureModel(),prepared='eng_Latn tel_Telu '+text,enc=m.srcTok(prepared,{truncation:true,max_length:256});
