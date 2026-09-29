@@ -11,13 +11,11 @@
     "@capacitor/core": "^7.4.3",
     "@capacitor/filesystem": "^7.0.1",
     "@capacitor/share": "^7.0.1",
-    "@huggingface/transformers": "^3.8.1",
     "@pdf-lib/fontkit": "^1.1.1",
-    "onnxruntime-web": "^1.22.0",
+    "onnxruntime-web": "1.20.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.54",
-    "docx": "^9.5.1",
-    "@indic-transliteration/sanscript": "^1.3.3"
+    "docx": "^9.5.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3",
