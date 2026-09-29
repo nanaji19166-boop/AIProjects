@@ -6,6 +6,10 @@ on:
       - 'telugusetu-mobile/**'
       - '.github/workflows/build-telugusetu-apk.yml'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'telugusetu-mobile/**'
+      - '.github/workflows/build-telugusetu-apk.yml'
 
 permissions:
   contents: write
