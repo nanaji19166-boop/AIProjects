@@ -96,10 +96,10 @@ jobs:
       - name: Publish installable APK release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: telugusetu-mobile-latest
-          name: TeluguSetu Mobile Latest
+          tag_name: telugusetu-mobile-${{ github.run_number }}
+          name: TeluguSetu Mobile #${{ github.run_number }}
           prerelease: true
           files: telugusetu-mobile/android/app/build/outputs/apk/debug/app-debug.apk
           body: |
-            Latest TeluguSetu Android debug APK. Install directly on Android; Play Store is not required.
+            TeluguSetu Android debug APK from GitHub Actions run #${{ github.run_number }}. Install directly on Android; Play Store is not required.
             Translation runs locally on the device. The model is downloaded on first use.
