@@ -1,6 +1,8 @@
 import './style.css';
 import * as ort from 'onnxruntime-web';
 import { PreTrainedTokenizer } from '@huggingface/transformers';
+import SanscriptModule from '@indic-transliteration/sanscript';
+const Sanscript = SanscriptModule.default || SanscriptModule;
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -151,7 +153,7 @@ async function ensureModel(){
   const decData=await modelAsset(F.decData,'Decoder weights',45,88);
   modelProgress(92,'Opening decoder…');
   const dec=await createSession(decBlob,decData,F.decData);
-  model={srcTok:src.tok,tgtTok:tgt.tok,startId:Number(src.gen.decoder_start_token_id||2),eosId:Number(src.gen.eos_token_id||2),enc,dec};
+  model={srcTok:src.tok,tgtTok:tgt.tok,srcDictSize:Number(src.meta.src_dict_size||32322),tgtDictSize:Number(src.meta.tgt_dict_size||122672),unkId:Number(src.meta.unk_id||3),startId:Number(src.gen.decoder_start_token_id||2),eosId:Number(src.gen.eos_token_id||2),enc,dec};
   modelProgress(100,'Translation engine ready on this phone.');
   msg('Translation engine ready. Future runs reuse the saved model files.');
   return model;
@@ -159,8 +161,17 @@ async function ensureModel(){
 function i64(a){return new ort.Tensor('int64',BigInt64Array.from(a,BigInt),[1,a.length]);}
 
 async function translateText(text){
-  const m=await ensureModel(),prepared='eng_Latn tel_Telu '+text,enc=m.srcTok(prepared,{truncation:true,max_length:256});
-  const ids=Array.from(enc.input_ids.data,Number),mask=Array.from(enc.attention_mask.data,Number);
+  const m=await ensureModel();
+  // IndicTrans2's BPE tokenizer has an extended vocabulary, but the ONNX
+  // encoder embedding is only 32,322 entries. The official ONNX helper
+  // remaps every source token >= src_dict_size to <unk> (id 3) before
+  // calling the encoder. Without this remap, Gather throws an out-of-bounds
+  // error such as idx=32333, which is the failure seen on the phone.
+  const prepared='eng_Latn tel_Telu '+text;
+  const enc=m.srcTok(prepared,{truncation:true,max_length:256});
+  const rawIds=Array.from(enc.input_ids.data,Number);
+  const ids=rawIds.map(id=>id>=m.srcDictSize?m.unkId:id);
+  const mask=Array.from(enc.attention_mask.data,Number);
   const encOut=await m.enc.run({input_ids:i64(ids),attention_mask:i64(mask)});
   const hidden=encOut.last_hidden_state||encOut[Object.keys(encOut)[0]];
   const generated=[m.startId];
@@ -170,7 +181,11 @@ async function translateText(text){
     let best=0,bestV=-Infinity;for(let i=0;i<row.length;i++){if(row[i]>bestV){bestV=row[i];best=i;}}
     generated.push(best);if(best===m.eosId)break;
   }
-  return m.tgtTok.decode(generated,{skip_special_tokens:true,clean_up_tokenization_spaces:true}).trim();
+  const safeGenerated=generated.map(id=>id>=m.tgtDictSize?m.unkId:id);
+  const rawDecoded=m.tgtTok.decode(safeGenerated,{skip_special_tokens:true,clean_up_tokenization_spaces:true}).trim();
+  // IndicTrans2's shared internal representation is Devanagari. For Telugu,
+  // convert that decoded representation to Telugu script before exporting.
+  try{return Sanscript.t(rawDecoded,'devanagari','telugu').trim();}catch{return rawDecoded;}
 }
 
 function translatable(item){return item.body.trim()&&!/^\d[\d\s|/_.:\-]*$/.test(item.body.trim());}
