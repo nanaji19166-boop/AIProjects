@@ -204,14 +204,16 @@ function wrapLines(font,text,size,max){
 }
 async function buildPdf(job){
   const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
-  const fontBytes=await fetch('./fonts/NotoSansTelugu-Regular.ttf').then(r=>{if(!r.ok)throw new Error('Bundled Noto Sans Telugu font is missing.');return r.arrayBuffer();});
+  const fontBytes=await fetch('./fonts/NotoSansTelugu-Regular.ttf').then(r=>{if(!r.ok)throw new Error('Bundled Noto Sans Telugu Regular font is missing.');return r.arrayBuffer();});
+  const boldBytes=await fetch('./fonts/NotoSansTelugu-Bold.ttf').then(r=>{if(!r.ok)throw new Error('Bundled Noto Sans Telugu Bold font is missing.');return r.arrayBuffer();});
   const font=await pdf.embedFont(fontBytes,{subset:true});
+  const boldFont=await pdf.embedFont(boldBytes,{subset:true});
   for(const page of job.pages){
     const p=pdf.addPage([595.28,841.89]);let y=805;
     const pageItems=job.items.filter(x=>x.page===page.page);
     for(const item of pageItems){
       const text=(item.marker?item.marker+' ':'')+(item.translated??item.body);if(!text.trim())continue;
-      for(const ln of wrapLines(font,text,10.5,520)){if(y<45)break;p.drawText(ln,{x:36,y,size:10.5,font,color:rgb(.08,.1,.14)});y-=15;}
+      const drawFont=/^Q(?:uestion)?\s*\d+/i.test(item.marker)?boldFont:font; for(const ln of wrapLines(drawFont,text,10.5,520)){if(y<45)break;p.drawText(ln,{x:36,y,size:10.5,font:drawFont,color:rgb(.08,.1,.14)});y-=15;}
     }
   }
   return pdf.save();
